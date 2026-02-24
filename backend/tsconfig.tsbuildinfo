@@ -1,1 +1,1 @@
-{"root":["./src/index.ts"],"version":"5.9.3"}
+{"root":["./src/index.ts","./src/game/game.ts","./src/game/player.ts","./src/game/room.ts","./src/types/player.types.ts","./src/types/room.types.ts"],"version":"5.9.3"}
