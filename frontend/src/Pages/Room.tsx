@@ -52,6 +52,8 @@ export function Room() {
   const [guess, setGuess] = useState("");
   const [messages, setMessages] = useState<string[]>([]);
   const [copied, setCopied] = useState(false);
+  const [isSocketConnected, setIsSocketConnected] = useState(false);
+  const [isRoomReady, setIsRoomReady] = useState(false);
   const [settings] = useState<RoomSettings>({
     maxPlayers: 8,
     rounds: 3,
@@ -76,21 +78,27 @@ export function Room() {
     socketRef.current = socket;
 
     socket.on("connect", () => {
+      setIsSocketConnected(true);
       setSelfSocketId(socket.id ?? null);
       setStatus(`Connected (${socket.id})`);
 
       const targetRoomId = currentRoomIdRef.current || initialRoomId;
       if (targetRoomId) {
+        setIsRoomReady(false);
         socket.emit("join_room", {
           roomId: targetRoomId,
           playerName,
         });
       } else if (hostMode && !hasCreatedRoomRef.current) {
+        setIsRoomReady(false);
         hasCreatedRoomRef.current = true;
         socket.emit("create_room", {
           hostName: playerName,
           settings,
         });
+      } else if (!hostMode) {
+        setStatus("Missing room id in invite link");
+        setIsRoomReady(true);
       }
     });
 
@@ -100,6 +108,7 @@ export function Room() {
       setRoomId(createdId);
       setPlayers(roomPlayers);
       setStatus("Private room created");
+      setIsRoomReady(true);
 
       const next = new URLSearchParams();
       next.set("roomId", createdId);
@@ -113,6 +122,7 @@ export function Room() {
       setRoomId(joinedRoomId);
       setPlayers(roomPlayers);
       setStatus(`Joined room ${joinedRoomId}`);
+      setIsRoomReady(true);
     });
 
     socket.on("player_joined", ({ players: roomPlayers }) => {
@@ -154,15 +164,21 @@ export function Room() {
 
     socket.on("error", (message: string) => {
       setStatus(`Error: ${message}`);
+      if (message.toLowerCase().includes("room")) {
+        setIsRoomReady(true);
+      }
     });
 
     socket.on("connect_error", (error: Error) => {
+      setIsSocketConnected(false);
       setStatus(`Connection error (${RESOLVED_SOCKET_URL}): ${error.message}`);
     });
 
     socket.on("disconnect", (reason: string) => {
       setStatus(`Disconnected: ${reason}`);
       setSelfSocketId(null);
+      setIsSocketConnected(false);
+      setIsRoomReady(false);
     });
 
     socket.io.on("reconnect_attempt", (attempt: number) => {
@@ -172,6 +188,8 @@ export function Room() {
     socket.io.on("reconnect", () => {
       setStatus("Reconnected");
       setSelfSocketId(socket.id ?? null);
+      setIsSocketConnected(true);
+      setIsRoomReady(false);
     });
 
     return () => {
@@ -186,6 +204,7 @@ export function Room() {
   }, [roomId]);
 
   const isDrawer = phase === "DRAWING" && (isDrawerFromServer || (!!drawerId && drawerId === selfSocketId));
+  const isConnecting = !isSocketConnected || !isRoomReady;
 
   const handleStart = () => {
     if (!socketRef.current || !roomId) return;
@@ -212,6 +231,16 @@ export function Room() {
 
   return (
     <div className="min-h-screen p-6 text-white">
+      {isConnecting ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/55 backdrop-blur-sm">
+          <div className="rounded-lg border-2 border-[#1b4da7] bg-white px-6 py-5 text-black shadow-xl">
+            <div className="mx-auto h-10 w-10 animate-spin rounded-full border-4 border-slate-300 border-t-[#1b4da7]" />
+            <p className="mt-3 text-center text-base font-semibold">🔄 Connection is being established.
+Please wait a moment — the server may take up to a minute to respond due to free-tier backend deployment. </p>
+          </div>
+        </div>
+      ) : null}
+
       <div className="mx-auto max-w-[1500px]">
         <img src={logo} alt="skribbl logo" className="mb-4" />
 
@@ -245,7 +274,9 @@ export function Room() {
               <p className="text-base">Room ID: {roomId || "Creating..."}</p>
               <p className="text-base">Status: {status}</p>
               <p className="text-base">Drawer: {drawerName ?? "-"}</p>
-              <p className="text-base">{isDrawer ? "Word:" : "Word Hint:"} {wordHint ?? "-"}</p>
+              <p className="text-base">
+                {isDrawer ? "Word:" : "Word Hint:"} {wordHint ?? "-"}
+              </p>
               <p className="truncate text-base">Invite Link: {inviteLink || "Waiting..."}</p>
             </div>
 

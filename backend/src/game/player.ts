@@ -20,6 +20,14 @@ export class Player{
     this.score += points;
    }
 
+   setGuessed(value: boolean){
+    this.isguessed = value;
+   }
+
+   hasGuessed(){
+    return this.isguessed;
+   }
+
    resetRound(){
     this.isguessed = false;
    }
@@ -35,7 +43,6 @@ export class Player{
     }
    }
 
-   
+
 
 }
-

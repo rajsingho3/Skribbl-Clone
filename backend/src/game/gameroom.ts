@@ -1,6 +1,5 @@
 import { Server } from "socket.io";
 
-/* ================= TYPES ================= */
 
 export type GamePhase =
   | "lobby"
@@ -51,7 +50,6 @@ function getRandomWords(count: number): string[] {
   return shuffled.slice(0, Math.max(1, count));
 }
 
-/* ================= PLAYER ================= */
 
 export class Player {
   id: string;
@@ -80,7 +78,6 @@ export class Player {
   }
 }
 
-/* ================= GAME ================= */
 
 class Game {
   settings: GameSettings;
@@ -136,7 +133,6 @@ class Game {
   }
 }
 
-/* ================= GAME ROOM ================= */
 
 export class GameRoom {
   id: string;

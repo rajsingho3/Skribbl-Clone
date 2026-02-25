@@ -16,6 +16,7 @@ export class Game {
     this.phase = GamePhase.WORD_SELECTION;
     this.round = 1;
     this.currentDrawerIndex = 0;
+    this.players.forEach((player) => player.resetRound());
   }
 
   getCurrentDrawer(): Player {
@@ -29,12 +30,16 @@ export class Game {
   setWord(word: string) {
     this.word = word;
     this.phase = GamePhase.DRAWING;
+    this.players.forEach((player) => player.resetRound());
   }
 
   checkGuess(player: Player, guess: string): boolean {
     if (!this.word) return false;
+    if (player.id === this.getCurrentDrawer().id) return false;
+    if (player.hasGuessed()) return false;
 
     if (guess.trim().toLowerCase() === this.word.toLowerCase()) {
+      player.setGuessed(true);
       player.addScore(10);
       return true;
     }
@@ -57,6 +62,7 @@ export class Game {
     }
 
     this.word = null;
+    this.players.forEach((player) => player.resetRound());
   }
 
   getPhase() {

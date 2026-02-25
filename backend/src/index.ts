@@ -8,6 +8,8 @@ const rooms = new Map<string, Room>();
 const socketRoomMap = new Map<string, string>();
 const roomCleanupTimers = new Map<string, NodeJS.Timeout>();
 const roomStrokes = new Map<string, StrokeData[]>();
+const roomTurnTickers = new Map<string, NodeJS.Timeout>();
+const roomTimeLeft = new Map<string, number>();
 
 const WORD_BANK = [
   "apple",
@@ -42,6 +44,12 @@ function wordHint(word: string) {
     .join(" ");
 }
 
+const io = new Server(3000, {
+  cors: {
+    origin: "*",
+  },
+});
+
 function emitGameState(room: Room, word: string) {
   const game = room.getGame();
   if (!game) {
@@ -63,11 +71,97 @@ function emitGameState(room: Room, word: string) {
   });
 }
 
-const io = new Server(3000, {
-  cors: {
-    origin: "*",
-  },
-});
+function clearTurnTicker(roomId: string) {
+  const ticker = roomTurnTickers.get(roomId);
+  if (ticker) {
+    clearInterval(ticker);
+    roomTurnTickers.delete(roomId);
+  }
+  roomTimeLeft.delete(roomId);
+}
+
+function allGuessersFinished(room: Room): boolean {
+  const game = room.getGame();
+  if (!game) return false;
+
+  const drawerId = game.getCurrentDrawer().id;
+  const guessers = room.getPlayers().filter((player) => player.id !== drawerId);
+
+  if (guessers.length === 0) return false;
+  return guessers.every((player) => player.hasGuessed());
+}
+
+function advanceTurn(roomId: string) {
+  const room = rooms.get(roomId);
+  if (!room) {
+    clearTurnTicker(roomId);
+    return;
+  }
+
+  const game = room.getGame();
+  if (!game) {
+    clearTurnTicker(roomId);
+    return;
+  }
+
+  clearTurnTicker(roomId);
+  game.nextTurn();
+
+  if (game.getPhase() === GamePhase.GAME_OVER) {
+    io.to(room.id).emit("game_state", {
+      phase: game.getPhase(),
+      round: game.getRound(),
+      drawerId: null,
+      drawerName: null,
+      wordHint: null,
+      isDrawer: false,
+    });
+    io.to(room.id).emit("players_updated", {
+      players: room.getPlayers().map((p) => p.toJSON()),
+    });
+    return;
+  }
+
+  startTurn(roomId);
+}
+
+function startTurn(roomId: string) {
+  const room = rooms.get(roomId);
+  if (!room) return;
+
+  const game = room.getGame();
+  if (!game || game.getPhase() === GamePhase.GAME_OVER) return;
+
+  clearTurnTicker(roomId);
+  roomStrokes.set(roomId, []);
+  io.to(roomId).emit("canvas_cleared", {});
+
+  const chosenWord = randomWord();
+  game.setWord(chosenWord);
+  emitGameState(room, chosenWord);
+  io.to(room.id).emit("players_updated", {
+    players: room.getPlayers().map((p) => p.toJSON()),
+  });
+
+  const initialTimeLeft = Math.max(1, room.settings.drawingTime);
+  roomTimeLeft.set(roomId, initialTimeLeft);
+  io.to(roomId).emit("timer_tick", { timeLeft: initialTimeLeft });
+
+  const ticker = setInterval(() => {
+    const nextTime = (roomTimeLeft.get(roomId) ?? 1) - 1;
+
+    if (nextTime <= 0) {
+      io.to(roomId).emit("timer_tick", { timeLeft: 0 });
+      advanceTurn(roomId);
+      return;
+    }
+
+    roomTimeLeft.set(roomId, nextTime);
+    io.to(roomId).emit("timer_tick", { timeLeft: nextTime });
+  }, 1000);
+
+  roomTurnTickers.set(roomId, ticker);
+}
 
 io.on("connection", (socket) => {
   const clearRoomCleanup = (roomId: string) => {
@@ -179,15 +273,7 @@ io.on("connection", (socket) => {
         return;
       }
 
-      roomStrokes.set(roomId, []);
-      io.to(roomId).emit("canvas_cleared", {});
-
-      const chosenWord = randomWord();
-      game.setWord(chosenWord);
-      emitGameState(room, chosenWord);
-      io.to(room.id).emit("players_updated", {
-        players: room.getPlayers().map((p) => p.toJSON()),
-      });
+      startTurn(roomId);
     } catch (error) {
       const message = error instanceof Error ? error.message : "Failed to start game";
       socket.emit("error", message);
@@ -316,25 +402,9 @@ io.on("connection", (socket) => {
       players: room.getPlayers().map((p) => p.toJSON()),
     });
 
-    game.nextTurn();
-
-    if (game.getPhase() === GamePhase.GAME_OVER) {
-      io.to(room.id).emit("game_state", {
-        phase: game.getPhase(),
-        round: game.getRound(),
-        drawerId: null,
-        drawerName: null,
-        wordHint: null,
-      });
-      return;
+    if (allGuessersFinished(room)) {
+      advanceTurn(room.id);
     }
-
-    roomStrokes.set(roomId, []);
-    io.to(roomId).emit("canvas_cleared", {});
-
-    const nextWord = randomWord();
-    game.setWord(nextWord);
-    emitGameState(room, nextWord);
   });
 
   socket.on("disconnect", () => {
@@ -350,9 +420,14 @@ io.on("connection", (socket) => {
       return;
     }
 
+    const game = room.getGame();
+    const wasCurrentDrawer =
+      game?.getPhase() === GamePhase.DRAWING && game.getCurrentDrawer().id === socket.id;
+
     room.removePlayer(socket.id);
     const players = room.getPlayers();
     if (players.length === 0) {
+      clearTurnTicker(roomId);
       const timer = setTimeout(() => {
         const latestRoom = rooms.get(roomId);
         if (!latestRoom) return;
@@ -369,5 +444,9 @@ io.on("connection", (socket) => {
     io.to(roomId).emit("player_joined", {
       players: players.map((p) => p.toJSON()),
     });
+
+    if (wasCurrentDrawer) {
+      advanceTurn(roomId);
+    }
   });
 });
