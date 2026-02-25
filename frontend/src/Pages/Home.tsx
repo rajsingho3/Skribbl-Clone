@@ -12,7 +12,6 @@ import colorAtlas from "../assets/color_atlas.gif";
 import eyesAtlas from "../assets/eyes_atlas.gif";
 import mouthAtlas from "../assets/mouth_atlas.gif";
 import randomize from "../assets/randomize.gif";
-import background from "../assets/background.png";
 
 const SPRITE_SIZE = 48;
 
