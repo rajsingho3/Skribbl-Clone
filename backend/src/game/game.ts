@@ -66,4 +66,12 @@ export class Game {
   getRound() {
     return this.round;
   }
+
+  getWord() {
+    return this.word;
+  }
+
+  getPlayers() {
+    return this.players;
+  }
 }

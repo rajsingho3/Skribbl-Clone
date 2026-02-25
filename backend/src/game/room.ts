@@ -27,6 +27,10 @@ export class Room {
     return Array.from(this.players.values());
   }
 
+  getPlayerById(playerId: string) {
+    return this.players.get(playerId) ?? null;
+  }
+
   startGame() {
     if (this.players.size < 2) {
       throw new Error("At least 2 players are required to start");

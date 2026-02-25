@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useEffect, useState } from "react";
 import logo from "../assets/logo.gif";
 import how from "../assets/how.gif";
 import step1 from "../assets/step1.gif";
@@ -51,6 +51,11 @@ export function Home() {
     return () => clearInterval(interval);
   }, []);
 
+  const handleCreateRoom = () => {
+    const playerName = name.trim() || "Player";
+    window.location.href = `/room?host=1&name=${encodeURIComponent(playerName)}`;
+  };
+
   return (
     <div className="min-h-screen text-white">
       <div className="flex items-center justify-center pt-7">
@@ -59,11 +64,7 @@ export function Home() {
       <div className="mx-auto mt-4 w-fit rounded-md  px-3 py-2">
         <div className="flex items-end gap-2">
           {avatarStrip.map((avatar, index) => (
-            <div
-              key={index}
-              className="relative h-12 w-9"
-              
-            >
+            <div key={index} className="relative h-12 w-9">
               <div className="absolute inset-0" style={spriteStyle(colorAtlas, avatar.color)} />
               <div className="absolute inset-0" style={spriteStyle(eyesAtlas, avatar.eyes)} />
               <div className="absolute inset-0" style={spriteStyle(mouthAtlas, avatar.mouth)} />
@@ -89,14 +90,7 @@ export function Home() {
             </select>
           </div>
 
-          <div
-            className="mb-3 relative h-36 rounded border border-blue-700/70 bg-[#123595]"
-            style={{
-             
-              backgroundSize: "260px",
-              backgroundPosition: "center",
-            }}
-          >
+          <div className="mb-3 relative h-36 rounded border border-blue-700/70 bg-[#123595]">
             <img
               src={randomize}
               alt="Randomize avatar"
@@ -120,7 +114,6 @@ export function Home() {
                   <div key={`right-${idx}`} className="avatar-arrow avatar-arrow-right" />
                 ))}
               </div>
-             
             </div>
           </div>
 
@@ -128,7 +121,10 @@ export function Home() {
             Play!
           </button>
 
-          <button className="w-full rounded-lg bg-blue-500 py-3 font-semibold text-white transition hover:bg-blue-600">
+          <button
+            onClick={handleCreateRoom}
+            className="w-full rounded-lg bg-blue-500 py-3 font-semibold text-white transition hover:bg-blue-600"
+          >
             Create Private Room
           </button>
         </div>

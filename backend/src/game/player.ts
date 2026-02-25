@@ -28,7 +28,8 @@ export class Player{
     return {
         id: this.id,
         name: this.name,
-        score: this.score,                
+        score: this.score,
+        isHost: this.isHost,
         isguessed: this.isguessed,
         isReady: this.isReady
     }

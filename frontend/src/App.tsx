@@ -1,13 +1,14 @@
-import { Home } from "./Pages/Home"
+import { Home } from "./Pages/Home";
+import { Room } from "./Pages/Room";
 
 function App() {
-  
+  const path = window.location.pathname.toLowerCase().replace(/\/+$/, "");
 
-  return (
-    <>
-      <Home />
-    </>
-  )
+  if (path === "/room") {
+    return <Room />;
+  }
+
+  return <Home />;
 }
 
-export default App
+export default App;

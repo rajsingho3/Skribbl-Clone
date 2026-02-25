@@ -10,6 +10,7 @@ export interface PlayerDTO {
   id: string;
   name: string;
   score: number;
+  isHost: boolean;
   isguessed: boolean;  
   isReady: boolean;
   }
