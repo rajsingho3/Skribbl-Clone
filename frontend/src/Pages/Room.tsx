@@ -145,7 +145,7 @@ export function Room() {
       socket.disconnect();
       socketRef.current = null;
     };
-  }, [hostMode, initialRoomId, playerName, settings]);
+  }, []);
 
   const inviteLink = useMemo(() => {
     if (!roomId) return "";
