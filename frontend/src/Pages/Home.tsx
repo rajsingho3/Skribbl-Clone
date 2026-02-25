@@ -11,6 +11,8 @@ import news from "../assets/news.gif";
 import colorAtlas from "../assets/color_atlas.gif";
 import eyesAtlas from "../assets/eyes_atlas.gif";
 import mouthAtlas from "../assets/mouth_atlas.gif";
+import randomize from "../assets/randomize.gif";
+import background from "../assets/background.png";
 
 const SPRITE_SIZE = 48;
 
@@ -71,7 +73,7 @@ export function Home() {
         </div>
       </div>
       <section className="px-6 pt-10">
-        <div className="mx-auto w-full max-w-md rounded-xl bg-blue-950/65 p-5 shadow-lg">
+        <div className="mx-auto w-full max-w-md rounded-xl bg-blue-900 p-5 shadow-lg">
           <div className="mb-4 flex gap-2">
             <input
               type="text"
@@ -88,8 +90,39 @@ export function Home() {
             </select>
           </div>
 
-          <div className="mb-3 flex h-28 items-center justify-center rounded bg-blue-900/80 text-4xl">
-            :-|
+          <div
+            className="mb-3 relative h-36 rounded border border-blue-700/70 bg-[#123595]"
+            style={{
+             
+              backgroundSize: "260px",
+              backgroundPosition: "center",
+            }}
+          >
+            <img
+              src={randomize}
+              alt="Randomize avatar"
+              className="absolute right-3 top-2 h-7 w-7 cursor-pointer"
+            />
+            <div className="flex h-full items-center justify-center gap-5">
+              <div className="flex flex-col gap-1">
+                {[0, 1, 2].map((idx) => (
+                  <div key={`left-${idx}`} className="avatar-arrow avatar-arrow-left" />
+                ))}
+              </div>
+
+              <div className="relative h-16 w-16 scale-[1.45]">
+                <div className="absolute inset-0" style={spriteStyle(colorAtlas, 8)} />
+                <div className="absolute inset-0" style={spriteStyle(eyesAtlas, 11)} />
+                <div className="absolute inset-0" style={spriteStyle(mouthAtlas, 7)} />
+              </div>
+
+              <div className="flex flex-col gap-1">
+                {[0, 1, 2].map((idx) => (
+                  <div key={`right-${idx}`} className="avatar-arrow avatar-arrow-right" />
+                ))}
+              </div>
+             
+            </div>
           </div>
 
           <button className="mb-3 w-full rounded-lg bg-green-500 py-3 text-xl font-bold text-white transition hover:bg-green-600">
@@ -102,9 +135,9 @@ export function Home() {
         </div>
       </section>
 
-      <section className="mt-10 bg-[#123595] px-6 py-10 ">
-        <div className="mx-auto grid w-full max-w-6xl gap-6 lg:grid-cols-3">
-          <article className="w-[450px] rounded-lg bg-[#0E2E95] p-6">
+      <section className="mt-10 bg-[#123595]/75 px-6 py-10 ">
+        <div className="mx-auto grid w-full  max-w-6xl gap-6 lg:grid-cols-3">
+          <article className="w-full h-96 rounded-lg bg-[#0E2E95] p-6">
             <div className="flex gap-23 ">
               <img className="size-8" src={about} alt="About Skribbl" />
               <h3 className="mb-4 text-2xl font-semibold">About</h3>
@@ -130,7 +163,7 @@ export function Home() {
               <h3 className="mb-4 text-2xl font-semibold">News</h3>
             </div>
 
-            <div className="max-h-[420px] overflow-y-auto pr-2 text-lg text-slate-100">
+            <div className="news-scrollbar max-h-[420px] overflow-y-auto pr-2 text-lg text-slate-100">
               <p className="mb-3 border-b border-blue-200/40 pb-2 font-semibold">Fresh paint</p>
               <p>Hello!</p>
               <ul className="ml-5 list-disc space-y-1 text-sm">
