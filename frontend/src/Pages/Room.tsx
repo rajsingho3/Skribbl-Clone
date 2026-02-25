@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { io, type Socket } from "socket.io-client";
 import logo from "../assets/logo.gif";
+import DrawingCanvas from "./canvas";
 
 type Player = {
   id: string;
@@ -17,8 +18,12 @@ type RoomSettings = {
   hintsenbled: boolean;
 };
 
-const RESOLVED_SOCKET_URL =
-  import.meta.env.VITE_SOCKET_URL ?? `${window.location.protocol}//${window.location.hostname}:3000`;
+const DEFAULT_SOCKET_URL =
+  import.meta.env.DEV && (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1")
+    ? "http://localhost:3000"
+    : `${window.location.protocol}//${window.location.hostname}:3000`;
+
+const RESOLVED_SOCKET_URL = import.meta.env.VITE_SOCKET_URL ?? DEFAULT_SOCKET_URL;
 
 function getHashQueryParams() {
   const hash = window.location.hash || "";
@@ -40,7 +45,10 @@ export function Room() {
   const [phase, setPhase] = useState("WAITING");
   const [roundLabel, setRoundLabel] = useState("Round 1 of 3");
   const [wordHint, setWordHint] = useState<string | null>(null);
+  const [isDrawerFromServer, setIsDrawerFromServer] = useState(false);
   const [drawerName, setDrawerName] = useState<string | null>(null);
+  const [drawerId, setDrawerId] = useState<string | null>(null);
+  const [selfSocketId, setSelfSocketId] = useState<string | null>(null);
   const [guess, setGuess] = useState("");
   const [messages, setMessages] = useState<string[]>([]);
   const [copied, setCopied] = useState(false);
@@ -68,6 +76,7 @@ export function Room() {
     socketRef.current = socket;
 
     socket.on("connect", () => {
+      setSelfSocketId(socket.id ?? null);
       setStatus(`Connected (${socket.id})`);
 
       const targetRoomId = currentRoomIdRef.current || initialRoomId;
@@ -115,29 +124,45 @@ export function Room() {
       setPlayers(roomPlayers);
     });
 
-    socket.on("game_state", ({ phase: nextPhase, round, drawerName: nextDrawer, wordHint: hint }) => {
-      setPhase(nextPhase);
-      setRoundLabel(`Round ${round} of ${settings.rounds}`);
-      setDrawerName(nextDrawer ?? null);
-      setWordHint(hint ?? null);
-      setStatus(nextPhase === "GAME_OVER" ? "Game over" : "Game in progress");
-    });
+    socket.on(
+      "game_state",
+      ({
+        phase: nextPhase,
+        round,
+        drawerId: nextDrawerId,
+        drawerName: nextDrawer,
+        wordHint: hint,
+        isDrawer: nextIsDrawer,
+      }) => {
+        setPhase(nextPhase);
+        setRoundLabel(`Round ${round} of ${settings.rounds}`);
+        setDrawerId(nextDrawerId ?? null);
+        setDrawerName(nextDrawer ?? null);
+        setWordHint(hint ?? null);
+        setIsDrawerFromServer(Boolean(nextIsDrawer));
+        setStatus(nextPhase === "GAME_OVER" ? "Game over" : "Game in progress");
+      }
+    );
 
-    socket.on("chat_message", ({ playerName: sender, message, correct }: { playerName: string; message: string; correct: boolean }) => {
-      const prefix = correct ? "Correct" : "Guess";
-      setMessages((prev) => [`${prefix} - ${sender}: ${message}`, ...prev].slice(0, 25));
-    });
+    socket.on(
+      "chat_message",
+      ({ playerName: sender, message, correct }: { playerName: string; message: string; correct: boolean }) => {
+        const prefix = correct ? "Correct" : "Guess";
+        setMessages((prev) => [`${prefix} - ${sender}: ${message}`, ...prev].slice(0, 25));
+      }
+    );
 
     socket.on("error", (message: string) => {
       setStatus(`Error: ${message}`);
     });
 
     socket.on("connect_error", (error: Error) => {
-      setStatus(`Connection error: ${error.message}`);
+      setStatus(`Connection error (${RESOLVED_SOCKET_URL}): ${error.message}`);
     });
 
     socket.on("disconnect", (reason: string) => {
       setStatus(`Disconnected: ${reason}`);
+      setSelfSocketId(null);
     });
 
     socket.io.on("reconnect_attempt", (attempt: number) => {
@@ -146,6 +171,7 @@ export function Room() {
 
     socket.io.on("reconnect", () => {
       setStatus("Reconnected");
+      setSelfSocketId(socket.id ?? null);
     });
 
     return () => {
@@ -158,6 +184,8 @@ export function Room() {
     if (!roomId) return "";
     return `${window.location.origin}${window.location.pathname}#/room?roomId=${encodeURIComponent(roomId)}`;
   }, [roomId]);
+
+  const isDrawer = phase === "DRAWING" && (isDrawerFromServer || (!!drawerId && drawerId === selfSocketId));
 
   const handleStart = () => {
     if (!socketRef.current || !roomId) return;
@@ -177,7 +205,7 @@ export function Room() {
 
   const handleGuessSubmit = () => {
     const text = guess.trim();
-    if (!text || !roomId || !socketRef.current) return;
+    if (!text || !roomId || !socketRef.current || isDrawer) return;
     socketRef.current.emit("submit_guess", { roomId, guess: text });
     setGuess("");
   };
@@ -209,38 +237,15 @@ export function Room() {
           </aside>
 
           <main className="col-span-12 rounded border-4 border-[#1b4da7] bg-[#3b405a] p-4 md:col-span-7">
-            <div className="grid grid-cols-2 gap-3 text-lg">
-              <label>Players</label>
-              <select className="rounded bg-white px-3 py-2 text-black" value={settings.maxPlayers} disabled>
-                <option>8</option>
-              </select>
-              <label>Language</label>
-              <select className="rounded bg-white px-3 py-2 text-black" value="English" disabled>
-                <option>English</option>
-              </select>
-              <label>Drawtime</label>
-              <select className="rounded bg-white px-3 py-2 text-black" value={settings.drawingTime} disabled>
-                <option>80</option>
-              </select>
-              <label>Rounds</label>
-              <select className="rounded bg-white px-3 py-2 text-black" value={settings.rounds} disabled>
-                <option>3</option>
-              </select>
-              <label>Word Count</label>
-              <select className="rounded bg-white px-3 py-2 text-black" value={settings.wordCount} disabled>
-                <option>3</option>
-              </select>
-              <label>Hints</label>
-              <select className="rounded bg-white px-3 py-2 text-black" value={settings.hintsenbled ? 2 : 0} disabled>
-                <option>{settings.hintsenbled ? "2" : "0"}</option>
-              </select>
+            <div className="rounded bg-[#e2ebff] p-2">
+              <DrawingCanvas isDrawer={isDrawer} socket={socketRef.current} roomId={roomId} />
             </div>
 
             <div className="mt-3 rounded bg-white p-3 text-black">
               <p className="text-base">Room ID: {roomId || "Creating..."}</p>
               <p className="text-base">Status: {status}</p>
               <p className="text-base">Drawer: {drawerName ?? "-"}</p>
-              <p className="text-base">Word Hint: {wordHint ?? "-"}</p>
+              <p className="text-base">{isDrawer ? "Word:" : "Word Hint:"} {wordHint ?? "-"}</p>
               <p className="truncate text-base">Invite Link: {inviteLink || "Waiting..."}</p>
             </div>
 
@@ -277,10 +282,11 @@ export function Room() {
                     handleGuessSubmit();
                   }
                 }}
-                className="w-full rounded border border-gray-300 px-3 py-2"
-                placeholder="Type your guess here..."
+                disabled={isDrawer}
+                className="w-full rounded border border-gray-300 px-3 py-2 disabled:bg-gray-100"
+                placeholder={isDrawer ? "You are drawing this turn" : "Type your guess here..."}
               />
-              <button onClick={handleGuessSubmit} className="rounded bg-blue-600 px-3 py-2 text-white">
+              <button onClick={handleGuessSubmit} disabled={isDrawer} className="rounded bg-blue-600 px-3 py-2 text-white disabled:opacity-50">
                 Send
               </button>
             </div>

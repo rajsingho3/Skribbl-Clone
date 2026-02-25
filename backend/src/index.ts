@@ -7,6 +7,8 @@ import { GamePhase, type RoomSetting } from "./types/room.types.js";
 const rooms = new Map<string, Room>();
 const socketRoomMap = new Map<string, string>();
 const roomCleanupTimers = new Map<string, NodeJS.Timeout>();
+const roomStrokes = new Map<string, StrokeData[]>();
+
 const WORD_BANK = [
   "apple",
   "house",
@@ -20,6 +22,14 @@ const WORD_BANK = [
   "castle",
 ];
 
+type StrokeData = {
+  type: "start" | "move";
+  x: number;
+  y: number;
+  color: string;
+  size: number;
+};
+
 function randomWord() {
   const word = WORD_BANK[Math.floor(Math.random() * WORD_BANK.length)];
   return word ?? "apple";
@@ -30,6 +40,27 @@ function wordHint(word: string) {
     .split("")
     .map(() => "_")
     .join(" ");
+}
+
+function emitGameState(room: Room, word: string) {
+  const game = room.getGame();
+  if (!game) {
+    return;
+  }
+
+  const drawer = game.getCurrentDrawer();
+  const hint = wordHint(word);
+
+  room.getPlayers().forEach((player) => {
+    io.to(player.id).emit("game_state", {
+      phase: game.getPhase(),
+      round: game.getRound(),
+      drawerId: drawer.id,
+      drawerName: drawer.name,
+      wordHint: player.id === drawer.id ? word : hint,
+      isDrawer: player.id === drawer.id,
+    });
+  });
 }
 
 const io = new Server(3000, {
@@ -44,6 +75,16 @@ io.on("connection", (socket) => {
     if (!timer) return;
     clearTimeout(timer);
     roomCleanupTimers.delete(roomId);
+  };
+
+  const resolveRoomId = (payloadRoomId?: string) => payloadRoomId ?? socketRoomMap.get(socket.id);
+
+  const canDrawInRoom = (room: Room) => {
+    const game = room.getGame();
+    if (!game || game.getPhase() !== GamePhase.DRAWING) return false;
+
+    const drawer = game.getCurrentDrawer();
+    return drawer.id === socket.id;
   };
 
   socket.on(
@@ -61,6 +102,7 @@ io.on("connection", (socket) => {
 
         room.addPlayer(host);
         rooms.set(roomId, room);
+        roomStrokes.set(roomId, []);
         clearRoomCleanup(roomId);
         socketRoomMap.set(socket.id, roomId);
         socket.join(roomId);
@@ -68,6 +110,10 @@ io.on("connection", (socket) => {
         socket.emit("room_created", {
           roomId,
           players: room.getPlayers().map((p) => p.toJSON()),
+        });
+
+        socket.emit("canvas_data", {
+          strokes: roomStrokes.get(roomId) ?? [],
         });
       } catch (error) {
         const message = error instanceof Error ? error.message : "Failed to create room";
@@ -102,6 +148,10 @@ io.on("connection", (socket) => {
           players: room.getPlayers().map((p) => p.toJSON()),
         });
 
+        socket.emit("canvas_data", {
+          strokes: roomStrokes.get(roomId) ?? [],
+        });
+
         io.to(roomId).emit("player_joined", {
           players: room.getPlayers().map((p) => p.toJSON()),
         });
@@ -129,16 +179,12 @@ io.on("connection", (socket) => {
         return;
       }
 
+      roomStrokes.set(roomId, []);
+      io.to(roomId).emit("canvas_cleared", {});
+
       const chosenWord = randomWord();
       game.setWord(chosenWord);
-
-      io.to(room.id).emit("game_state", {
-        phase: game.getPhase(),
-        round: game.getRound(),
-        drawerId: game.getCurrentDrawer().id,
-        drawerName: game.getCurrentDrawer().name,
-        wordHint: wordHint(chosenWord),
-      });
+      emitGameState(room, chosenWord);
       io.to(room.id).emit("players_updated", {
         players: room.getPlayers().map((p) => p.toJSON()),
       });
@@ -146,6 +192,88 @@ io.on("connection", (socket) => {
       const message = error instanceof Error ? error.message : "Failed to start game";
       socket.emit("error", message);
     }
+  });
+
+  socket.on("draw_start", (payload: { roomId?: string; x: number; y: number; color: string; size: number }) => {
+    const roomId = resolveRoomId(payload.roomId);
+    if (!roomId) return;
+
+    const room = rooms.get(roomId);
+    if (!room || !canDrawInRoom(room)) return;
+
+    const stroke: StrokeData = {
+      type: "start",
+      x: payload.x,
+      y: payload.y,
+      color: payload.color,
+      size: payload.size,
+    };
+
+    const strokes = roomStrokes.get(roomId) ?? [];
+    strokes.push(stroke);
+    roomStrokes.set(roomId, strokes);
+
+    socket.to(roomId).emit("draw_data", stroke);
+  });
+
+  socket.on("draw_move", (payload: { roomId?: string; x: number; y: number }) => {
+    const roomId = resolveRoomId(payload.roomId);
+    if (!roomId) return;
+
+    const room = rooms.get(roomId);
+    if (!room || !canDrawInRoom(room)) return;
+
+    const strokes = roomStrokes.get(roomId);
+    const lastStart = strokes?.slice().reverse().find((s) => s.type === "start");
+    if (!strokes || !lastStart) return;
+
+    const stroke: StrokeData = {
+      type: "move",
+      x: payload.x,
+      y: payload.y,
+      color: lastStart.color,
+      size: lastStart.size,
+    };
+
+    strokes.push(stroke);
+    roomStrokes.set(roomId, strokes);
+
+    socket.to(roomId).emit("draw_data", stroke);
+  });
+
+  socket.on("draw_end", (_payload: { roomId?: string }) => {
+    // No-op for now. Strokes are segmented by each "start" event.
+  });
+
+  socket.on("clear_canvas", ({ roomId }: { roomId?: string }) => {
+    const resolvedRoomId = resolveRoomId(roomId);
+    if (!resolvedRoomId) return;
+
+    const room = rooms.get(resolvedRoomId);
+    if (!room || !canDrawInRoom(room)) return;
+
+    roomStrokes.set(resolvedRoomId, []);
+    io.to(resolvedRoomId).emit("canvas_cleared", {});
+  });
+
+  socket.on("undo_canvas", ({ roomId }: { roomId?: string }) => {
+    const resolvedRoomId = resolveRoomId(roomId);
+    if (!resolvedRoomId) return;
+
+    const room = rooms.get(resolvedRoomId);
+    if (!room || !canDrawInRoom(room)) return;
+
+    const strokes = roomStrokes.get(resolvedRoomId) ?? [];
+
+    while (strokes.length > 0) {
+      const last = strokes.pop();
+      if (last?.type === "start") {
+        break;
+      }
+    }
+
+    roomStrokes.set(resolvedRoomId, strokes);
+    io.to(resolvedRoomId).emit("canvas_undo", { strokes });
   });
 
   socket.on("submit_guess", ({ roomId, guess }: { roomId: string; guess: string }) => {
@@ -201,15 +329,12 @@ io.on("connection", (socket) => {
       return;
     }
 
+    roomStrokes.set(roomId, []);
+    io.to(roomId).emit("canvas_cleared", {});
+
     const nextWord = randomWord();
     game.setWord(nextWord);
-    io.to(room.id).emit("game_state", {
-      phase: game.getPhase(),
-      round: game.getRound(),
-      drawerId: game.getCurrentDrawer().id,
-      drawerName: game.getCurrentDrawer().name,
-      wordHint: wordHint(nextWord),
-    });
+    emitGameState(room, nextWord);
   });
 
   socket.on("disconnect", () => {
@@ -233,6 +358,7 @@ io.on("connection", (socket) => {
         if (!latestRoom) return;
         if (latestRoom.getPlayers().length === 0) {
           rooms.delete(roomId);
+          roomStrokes.delete(roomId);
         }
         roomCleanupTimers.delete(roomId);
       }, 15000);
