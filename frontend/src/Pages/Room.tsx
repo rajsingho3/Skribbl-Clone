@@ -20,8 +20,15 @@ type RoomSettings = {
 const RESOLVED_SOCKET_URL =
   import.meta.env.VITE_SOCKET_URL ?? `${window.location.protocol}//${window.location.hostname}:3000`;
 
+function getHashQueryParams() {
+  const hash = window.location.hash || "";
+  const withoutHash = hash.startsWith("#") ? hash.slice(1) : hash;
+  const [, query = ""] = withoutHash.split("?");
+  return new URLSearchParams(query);
+}
+
 export function Room() {
-  const params = useMemo(() => new URLSearchParams(window.location.search), []);
+  const params = useMemo(() => getHashQueryParams(), []);
   const fallbackNameRef = useRef(`Player-${Math.floor(Math.random() * 9000 + 1000)}`);
   const hostMode = params.get("host") === "1";
   const initialRoomId = params.get("roomId") ?? "";
@@ -85,11 +92,11 @@ export function Room() {
       setPlayers(roomPlayers);
       setStatus("Private room created");
 
-      const next = new URLSearchParams(window.location.search);
+      const next = new URLSearchParams();
       next.set("roomId", createdId);
       next.set("host", "1");
       next.set("name", playerName);
-      window.history.replaceState({}, "", `/room?${next.toString()}`);
+      window.location.hash = `/room?${next.toString()}`;
     });
 
     socket.on("room_joined", ({ roomId: joinedRoomId, players: roomPlayers }) => {
@@ -149,8 +156,7 @@ export function Room() {
 
   const inviteLink = useMemo(() => {
     if (!roomId) return "";
-    const base = window.location.origin;
-    return `${base}/room?roomId=${encodeURIComponent(roomId)}`;
+    return `${window.location.origin}${window.location.pathname}#/room?roomId=${encodeURIComponent(roomId)}`;
   }, [roomId]);
 
   const handleStart = () => {

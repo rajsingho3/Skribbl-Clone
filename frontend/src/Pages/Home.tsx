@@ -53,7 +53,7 @@ export function Home() {
 
   const handleCreateRoom = () => {
     const playerName = name.trim() || "Player";
-    window.location.href = `/room?host=1&name=${encodeURIComponent(playerName)}`;
+    window.location.hash = `/room?host=1&name=${encodeURIComponent(playerName)}`;
   };
 
   return (
