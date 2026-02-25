@@ -32,19 +32,23 @@ Skribbl-Clone/
 
 
 
-## Backend Setup
+## 🛠 Backend Setup
 
 ```bash
+# navigate to the backend folder, install dependencies and start the dev server
 cd backend
 pnpm install
 pnpm dev
+```
 
-## Frontend  Setup
+## 🖥️ Frontend Setup
 
 ```bash
+# navigate to the frontend folder, install dependencies and start the dev server
 cd frontend
 pnpm install
 pnpm dev
+```
 
 ## 🌍 Deployment
 
@@ -52,3 +56,9 @@ pnpm dev
 |------------|----------|------|
 | Frontend   | Vercel   | https://skribbl-clone-indol.vercel.app/ |
 | Backend    | Render   | https://skribbl-clone-1-m03a.onrender.com |
+
+## ℹ️ Notes
+
+- Make sure you have [pnpm](https://pnpm.io/) installed globally.
+- Both frontend and backend servers should be running concurrently for full functionality.
+- Configure any required environment variables in the respective `/backend` or `/frontend` directories.
